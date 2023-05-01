@@ -1,8 +1,10 @@
 from flask import Flask, render_template, request
 from services.chat_completions_service import ChatConversation
+import logging
 
 app = Flask(__name__)
 
+logging.basicConfig(level=logging.INFO)
 main_conversation = ChatConversation()
 
 # Define a route to render the basic chat page
@@ -23,6 +25,7 @@ def chat():
     
 
 if __name__ == '__main__':
+    
     app.run(debug=True)
 
     app.run()

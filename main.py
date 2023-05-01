@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request
-from services.chat_completions_service import ChatConversation
+from services.chat_completions_model import ChatConversation
 import logging
 
 app = Flask(__name__)

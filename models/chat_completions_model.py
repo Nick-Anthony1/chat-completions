@@ -1,9 +1,11 @@
-from dotenv import load_dotenv
-import openai
 import os
-import tiktoken
 import time
 import logging
+import tiktoken
+import openai
+import pandas as pd
+from dotenv import load_dotenv
+from services import embeddings_search
 
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -13,7 +15,6 @@ todo add a function that allows prompt template injection
 todo add a function that summarises context rather than pruning
 todo add knowledge-based vector search
 """
-
 class ChatConversation():
     def __init__(self, **kwargs):
         """
@@ -38,6 +39,7 @@ class ChatConversation():
         self.sample_question = kwargs.get("sample_question", "Hey how are you")
         self.sample_response = kwargs.get("sample_response", "I'm doing well thanks")
         self.token_limit = kwargs.get("token_limit", 3900)
+        self.knowledge_base = kwargs.get("knowledge_base", False)
         self.system_messages = [
                 {"role": "system", "content": self.system_message},
                 {"role": "user", "content": self.sample_question},
@@ -47,8 +49,11 @@ class ChatConversation():
         self.init_token_length = 0
         self.context_token_length = 0
         self.context_length_store = []
+        self.embeddings = None
         self.encoding = tiktoken.encoding_for_model(self.engine)
         self.__get_init_length()
+        if self.knowledge_base:
+            self.embeddings = embeddings_search.init_db()
 
     def __str__(self):
         """
@@ -61,7 +66,7 @@ class ChatConversation():
         Returns the tiktoken token length of a given string.
         """
         return len(self.encoding.encode(message))
-    
+
     def __get_init_length(self):
         """
         Calculates and stores the initial token length of the system messages
@@ -78,20 +83,24 @@ class ChatConversation():
         - updates the context
         - returns a string of the response from the chat completion API
         """
+        if self.knowledge_base: 
+            knowledge = embeddings_search.search(prompt, self.embeddings)
+            prompt = f"{prompt}.\nUse this information to respond\n{knowledge}"
         prompt_length = self.get_length(prompt)
         combined_length = prompt_length + self.init_token_length 
 
         if combined_length > self.token_limit:
-            self.logger.error(f"Token limit exceeded by {combined_length - self.token_limit}")
+            self.logger.error("Token limit exceeded by: %s", combined_length - self.token_limit)
             raise ValueError(f"Token limit exceeded by {combined_length - self.token_limit}")
-        
+
         else:
             self.__update_context(prompt, prompt_length)
             return self.__request_completion()
 
     def __update_context(self, prompt, prompt_length):
         """
-        Updates the conversation context with a new user message, and prunes the context if necessary.
+        Updates the conversation context with a new user message
+        and prunes the context if necessary.
 
         Inputs:
         prompt: A string representing a user message.
@@ -101,8 +110,8 @@ class ChatConversation():
                 self.init_token_length,
                 self.context_token_length, 
                 prompt_length
-                ]) 
-        
+                ])
+
         if updated_length > self.token_limit:
             self.__prune_context(updated_length-self.token_limit)
 
@@ -125,10 +134,10 @@ class ChatConversation():
 
     def __request_completion(self):
         """
-        Sends a request to the OpenAI chat completions API using the parameters initialised in the class.
+        Sends a request to the OpenAI chat completions API using the parameters in init.
         Returns the models response and updates the context stores and messages array.
         """
-        self.logger.info(f'Number of messages: {len(self.messages)}')
+        self.logger.info('Number of messages: %s', len(self.messages))
         request_made = time.time()
 
         try:
@@ -138,15 +147,15 @@ class ChatConversation():
             max_tokens = self.max_tokens,
             messages= self.system_messages + self.messages
             )
-            
+
             response_length = response["usage"]["completion_tokens"]
             self.context_token_length += response_length
             self.context_length_store.append(response_length)
             self.messages.append({"role": "assistant", "content": response["choices"][0]["message"]["content"]})
 
-            self.logger.info(f"***Completion received in {round(time.time()-request_made,2)}***")
+            self.logger.info("Completion received in %s", round(time.time()-request_made,2))
             return response["choices"][0]["message"]["content"]
-        
+
         except openai.error.APIError as e:
             self.logger.error(f"OpenAI API error: {str(e)}")
             return "Sorry, there was an reaching the service. Please try again."

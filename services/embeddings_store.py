@@ -37,4 +37,4 @@ def create_knowledge_base(csv_file, chunk_input=False, header_name=None):
     with open('embeddings.pickle', 'wb') as f:
         pickle.dump(df, f)
 
-create_knowledge_base("subs.csv")
+create_knowledge_base("knowledge.csv")

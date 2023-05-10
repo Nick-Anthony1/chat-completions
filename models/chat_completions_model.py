@@ -1,19 +1,21 @@
 import os
 import time
 import logging
+import asyncio
 import tiktoken
 import openai
 import pandas as pd
 from dotenv import load_dotenv
 from services import embeddings_search
+from services import moderation
 
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+key = os.getenv("OPENAI_API_KEY")
+openai.api_key = key
 
 """
 todo add a function that allows prompt template injection
 todo add a function that summarises context rather than pruning
-todo add knowledge-based vector search
 """
 class ChatConversation():
     def __init__(self, **kwargs):
@@ -83,11 +85,14 @@ class ChatConversation():
         - updates the context
         - returns a string of the response from the chat completion API
         """
+        if moderation.verify(prompt, key):
+            return "Message contains inappropriate content"
+
         if self.knowledge_base: 
             knowledge = embeddings_search.search(prompt, self.embeddings)
-            prompt = f"{prompt}.\nUse this information to respond\n{knowledge}"
+            prompt = f"{prompt}.\nUse these knowledge articles to help respond\n{knowledge}, if unclear respond I'm not sure about that"
         prompt_length = self.get_length(prompt)
-        combined_length = prompt_length + self.init_token_length 
+        combined_length = prompt_length + self.init_token_length
 
         if combined_length > self.token_limit:
             self.logger.error("Token limit exceeded by: %s", combined_length - self.token_limit)
@@ -158,19 +163,19 @@ class ChatConversation():
 
         except openai.error.APIError as e:
             self.logger.error(f"OpenAI API error: {str(e)}")
-            return "Sorry, there was an reaching the service. Please try again."
+            return "Sorry, there was an error reaching the service. Please try again."
         
         except openai.error.APIError as e:
             self.logger.error(f"OpenAI API error: {str(e)}")
-            return "Sorry, there was an reaching the service. Please try again."
+            return "Sorry, there was an error reaching the service. Please try again."
 
         except openai.error.APIConnectionError as e:
             self.logger.error(f"OpenAI API error: {str(e)}")
-            return "Sorry, there was an reaching the service. Please try again."
+            return "Sorry, there was an error reaching the service. Please try again."
 
         except openai.error.RateLimitError as e:
             self.logger.error(f"OpenAI API error: {str(e)}")
-            return "Sorry, there was an reaching the service. Please try again."
+            return "Sorry, there was an error reaching the service. Please try again."
         
         except Exception as e:
             self.logger.exception(f"Unhandled exception occured {e}")

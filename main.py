@@ -5,7 +5,7 @@ import logging
 app = Flask(__name__)
 
 logging.basicConfig(level=logging.INFO)
-main_conversation = ChatConversation(knowledge_base=True)
+main_conversation = ChatConversation(knowledge_base=True, system_message="You are a helpful assistant")
 
 # Define a route to render the basic chat page
 @app.route('/')
@@ -19,11 +19,10 @@ def chat():
     try:
         response = main_conversation.ask_question(question)
         return {"question": question, "response":response}
-    
+
     except ValueError as e:
         print(e)
         return {"question": question, "response": "Sorry, I can't process that many words."}
-    
 
 if __name__ == '__main__':
     
